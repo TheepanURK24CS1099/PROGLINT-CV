@@ -3,35 +3,35 @@ import cv2
 
 class PersonCounter:
     """
-    Manages Person IN/OUT Counting by detecting when tracked persons cross a configurable counting line.
-    Prevents duplicate counts using per-track position history, discrete side-state tracking,
-    and ByteTrack track_id state keying.
+    Manages Person IN/OUT Counting by detecting line-crossing transitions of tracked persons.
+    Keyed strictly by ByteTrack track_id with inside_ids tracking and video start state handling.
     """
     def __init__(self, line_position: float = 0.5, max_disappeared_frames: int = 30):
-        # This code is used to store the counting line position ratio relative to frame height (0.0 to 1.0)
+        # This code is used for IN/OUT person counting to store the counting line position ratio relative to frame height (0.0 to 1.0)
         self.line_position = line_position
         
-        # This code is used to maintain cumulative IN and OUT line-crossing event counts
+        # This code is used for IN/OUT person counting to maintain cumulative IN and OUT line-crossing event counts
         self.in_count = 0
         self.out_count = 0
 
-        # This code is used to store the previous center position (cx, cy) keyed strictly by ByteTrack track_id
+        # This code is used for IN/OUT person counting to track currently inside ByteTrack track_ids using a set
+        self.inside_ids = set()
+
+        # This code is used for IN/OUT person counting to store previous center position (cx, cy) keyed strictly by ByteTrack track_id
         self.previous_positions = {}
 
-        # This code is used to maintain the side state ('ABOVE' or 'BELOW') keyed strictly by ByteTrack track_id
-        # to guarantee that a single line crossing event produces exactly one counting event.
+        # This code is used for IN/OUT person counting to maintain side state ('ABOVE' or 'BELOW') keyed strictly by ByteTrack track_id
         self.track_side = {}
 
-        # This code is used to record the last frame index a ByteTrack track_id was observed
-        # to handle temporary track loss and prevent fake crossing counts upon track re-entry.
+        # This code is used for IN/OUT person counting to record the last frame index a ByteTrack track_id was observed
         self.last_seen_frame = {}
 
-        # This code is used to track current frame index and maximum allowed track disappearance frames
+        # This code is used for IN/OUT person counting to track frame index and maximum track loss frames
         self.current_frame = 0
         self.max_disappeared_frames = max_disappeared_frames
 
     def set_line_position(self, line_position: float):
-        # This code is used to dynamically update the counting line position ratio when adjusted in the UI
+        # This code is used for IN/OUT person counting to dynamically update counting line position ratio
         self.line_position = max(0.05, min(0.95, line_position))
 
     def update(self, tracked_persons: list, frame_shape: tuple):
@@ -41,7 +41,9 @@ class PersonCounter:
         self.current_frame += 1
         height, width = frame_shape[:2]
 
-        # This code is used to calculate the Y-coordinate of the horizontal counting line for person IN/OUT counting
+        # This code is used for IN/OUT person counting to calculate horizontal counting line Y-coordinate
+        # ABOVE region: cy < line_y (Entry / Outside region)
+        # BELOW region: cy >= line_y (Exit / Inside region)
         line_y = int(height * self.line_position)
 
         for person in tracked_persons:
@@ -49,7 +51,7 @@ class PersonCounter:
             track_id = int(person['track_id'])
             bbox = person['bbox']
 
-            # This code is used to calculate the center point (cx, cy) of the person's bounding box for IN/OUT counting
+            # This code is used for IN/OUT person counting to calculate center point (cx, cy) of bounding box
             x1, y1, x2, y2 = bbox
             cx = float((x1 + x2) / 2.0)
             cy = float((y1 + y2) / 2.0)
@@ -59,37 +61,40 @@ class PersonCounter:
             # 'BELOW' (cy >= line_y) -> Inside region
             current_side = 'ABOVE' if cy < line_y else 'BELOW'
 
-            # This code is used to check whether the track_id was previously lost for too many frames.
-            # If a track was missing for > max_disappeared_frames, re-initialize state without counting a fake crossing event.
+            # This code is used for IN/OUT person counting to handle video start state and track disappearance.
+            # If a track is seen for the first time or was lost for > max_disappeared_frames, initialize side state without counting.
             frames_since_last_seen = self.current_frame - self.last_seen_frame.get(track_id, self.current_frame)
             track_was_lost = frames_since_last_seen > self.max_disappeared_frames
 
-            # This code is used to detect line crossing transitions (ABOVE <-> BELOW) for person IN/OUT counting
             if track_id in self.track_side and not track_was_lost:
                 previous_side = self.track_side[track_id]
 
-                # Detect top-to-bottom line crossing transition (Moving DOWN: ABOVE -> BELOW => IN count +1)
+                # This code is used for IN/OUT person counting to detect top-to-bottom line crossing (ABOVE -> BELOW => IN count +1)
                 if previous_side == 'ABOVE' and current_side == 'BELOW':
                     self.in_count += 1
+                    # This code is used for IN/OUT person counting to store the track ID inside the current-inside set after a valid IN crossing
+                    self.inside_ids.add(track_id)
                     self.track_side[track_id] = 'BELOW'
 
-                # Detect bottom-to-top line crossing transition (Moving UP: BELOW -> ABOVE => OUT count +1)
+                # This code is used for IN/OUT person counting to detect bottom-to-top line crossing (BELOW -> ABOVE => OUT count +1)
                 elif previous_side == 'BELOW' and current_side == 'ABOVE':
                     self.out_count += 1
+                    # This code is used for IN/OUT person counting to safely remove track ID from current-inside set after a valid OUT crossing
+                    self.inside_ids.discard(track_id)
                     self.track_side[track_id] = 'ABOVE'
             else:
-                # First observation or re-appearance after track loss: initialize side state without incrementing counters
+                # Video start state or track re-appearance: initialize side state without incrementing counters
                 self.track_side[track_id] = current_side
 
-            # This code is used to update previous center position and last seen frame for this ByteTrack track_id
+            # This code is used for IN/OUT person counting to store center position and last seen frame for ByteTrack track_id
             self.previous_positions[track_id] = (cx, cy)
             self.last_seen_frame[track_id] = self.current_frame
 
         return tracked_persons
 
     def get_counts(self) -> dict:
-        # This code is used to calculate currently inside people count (INSIDE = IN - OUT) for person IN/OUT counting
-        currently_inside = max(0, self.in_count - self.out_count)
+        # This code is used for IN/OUT person counting to return currently inside count using len(inside_ids)
+        currently_inside = len(self.inside_ids)
         return {
             'in': self.in_count,
             'out': self.out_count,
@@ -103,10 +108,8 @@ class PersonCounter:
         annotated = frame.copy()
         height, width = frame.shape[:2]
 
-        # This code is used to calculate line Y position for drawing the counting line on the video frame
+        # This code is used for IN/OUT person counting to draw the horizontal line across video frame
         line_y = int(height * self.line_position)
-
-        # Draw horizontal counting line across the frame
         line_color = (0, 165, 255)  # Amber line in BGR
         cv2.line(annotated, (0, line_y), (width, line_y), line_color, 3)
 
@@ -121,11 +124,10 @@ class PersonCounter:
         cv2.putText(annotated, "IN v", (width - 80, line_y + 22),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 0), 2, cv2.LINE_AA)
 
-        # This code is used to draw IN, OUT, and INSIDE overlay box on video frame for person IN/OUT counting
+        # This code is used for IN/OUT person counting to draw IN, OUT, and INSIDE overlay box on video frame
         counts = self.get_counts()
         badge_text = f"IN: {counts['in']}  |  OUT: {counts['out']}  |  INSIDE: {counts['inside']}"
         
-        # Overlay background rectangle in top left corner
         (text_w, text_h), _ = cv2.getTextSize(badge_text, cv2.FONT_HERSHEY_SIMPLEX, 0.65, 2)
         cv2.rectangle(annotated, (10, 10), (text_w + 30, text_h + 25), (30, 30, 30), -1)
         cv2.rectangle(annotated, (10, 10), (text_w + 30, text_h + 25), line_color, 2)
@@ -136,10 +138,11 @@ class PersonCounter:
         return annotated
 
     def reset(self):
-        # This code is used to reset all counters and track state histories for person IN/OUT counting
+        # This code is used for IN/OUT person counting to reset all counters and state tracking dictionaries
         self.in_count = 0
         self.out_count = 0
         self.current_frame = 0
+        self.inside_ids.clear()
         self.previous_positions.clear()
         self.track_side.clear()
         self.last_seen_frame.clear()

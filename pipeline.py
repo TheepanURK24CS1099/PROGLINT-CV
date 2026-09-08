@@ -129,7 +129,13 @@ class TrackingPipeline:
         }
         return annotated_frame, stats
 
+    def reset(self):
+        # This code is used for IN/OUT person counting to reset state counters when processing a new video
+        self.person_counter.reset()
+        self.metrics.reset()
+
     @property
     def total_unique_count(self) -> int:
         return self.identity_manager.get_total_unique_count()
+
 
