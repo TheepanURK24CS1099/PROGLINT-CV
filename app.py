@@ -15,11 +15,11 @@ if video_file:
         f.write(video_file.getbuffer())
         video_path = f.name
 
-    # This code is used to initialize the pipeline and set line position for person IN/OUT counting
-    pipeline = TrackingPipeline("models/best.pt", line_position=line_pos)
-    if hasattr(pipeline, 'set_line_position'):
-        pipeline.set_line_position(line_pos)
+    # This code is used for IN/OUT person counting to initialize the tracking pipeline and configure line position
+    pipeline = TrackingPipeline("models/best.pt")
+    pipeline.set_line_position(line_pos)
     cap = cv2.VideoCapture(video_path)
+
 
 
     

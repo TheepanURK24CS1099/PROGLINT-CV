@@ -94,19 +94,14 @@ def process_frame(frame, model, tracker, identity_manager, metrics, person_count
 # =====================================================================
 class TrackingPipeline:
     """Combines detector, tracker, identity manager, person counter, and metrics into one object."""
-    def __init__(self, model_path: str = "models/best.pt", *args, line_position: float = 0.5, **kwargs):
-        # Handle line_position parameter flexibly whether passed positionally, via keyword, or in kwargs
-        if 'line_position' in kwargs:
-            line_position = kwargs['line_position']
-        elif len(args) > 0 and isinstance(args[0], (int, float)):
-            line_position = float(args[0])
-
+    def __init__(self, model_path: str = "models/best.pt", line_position: float = 0.5, *args, **kwargs):
         self.model = load_detector(model_path)
         self.tracker = init_tracker()
         self.identity_manager = IdentityManager()
         self.metrics = TrackingMetrics()
-        # This code is used to initialize PersonCounter for person IN/OUT counting with configurable line position
+        # This code is used for IN/OUT person counting to initialize PersonCounter with line position
         self.person_counter = PersonCounter(line_position=line_position)
+
 
 
     def set_line_position(self, line_pos: float):
