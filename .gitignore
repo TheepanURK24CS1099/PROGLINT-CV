@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.DS_Store
+input/uploaded_temp.mp4
+.venv/
+env/
+venv/
+ENV/
+.idea/
+.vscode/
+*.log
