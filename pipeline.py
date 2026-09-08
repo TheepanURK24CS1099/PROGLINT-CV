@@ -89,7 +89,8 @@ def process_frame(frame, detector, tracker, metrics, conf_threshold: float = 0.5
     frame_metrics = {
         'current_people': len(tracked_persons),
         'total_unique': tracker.get_total_unique_count(),
-        'fps': metrics.get_fps()
+        'fps': metrics.get_fps(),
+        'tracks': tracked_persons
     }
 
     return annotated_frame, frame_metrics
