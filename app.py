@@ -20,11 +20,9 @@ if video_file:
     pipeline.set_line_position(line_pos)
     cap = cv2.VideoCapture(video_path)
 
-
-
-    
     video_display = st.empty()
     status_display = st.empty()
+
 
     while cap.isOpened():
         ret, frame = cap.read()

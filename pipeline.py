@@ -102,9 +102,8 @@ class TrackingPipeline:
         # This code is used for IN/OUT person counting to initialize PersonCounter with line position
         self.person_counter = PersonCounter(line_position=line_position)
 
-
-
     def set_line_position(self, line_pos: float):
+
         # This code is used to set the counting line position ratio dynamically for person IN/OUT counting
         self.person_counter.set_line_position(line_pos)
 
