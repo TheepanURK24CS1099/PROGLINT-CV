@@ -65,36 +65,30 @@ python app.py
 
 ---
 
-## 4. Key Code Locations (Quick Reference)
+## 4. Modular Code Architecture (Quick Reference)
 
-| Functionality | File | Class / Method | Line / Location |
-| :--- | :--- | :--- | :--- |
-| **YOLOv8 Inference** | [`detector.py`](file:///d:/yolov8/detector.py) | `PersonDetector.detect_persons()` | `self.model(frame, conf=conf_threshold)` |
-| **Person Class Filtering** | [`detector.py`](file:///d:/yolov8/detector.py) | `PersonDetector.detect_persons()` | `box.cls[0] == self.person_class_id` |
-| **ByteTrack Initialization** | [`tracker.py`](file:///d:/yolov8/tracker.py) | `PersonTracker._init_tracker()` | `BYTETracker(args)` |
-| **ByteTrack Update** | [`tracker.py`](file:///d:/yolov8/tracker.py) | `PersonTracker.track_persons()` | `self.tracker.update(boxes_cpu, frame)` |
-| **Track ID Extraction** | [`tracker.py`](file:///d:/yolov8/tracker.py) | `PersonTracker.track_persons()` | `track_id = int(t[4])` |
-| **FPS Calculation** | [`metrics.py`](file:///d:/yolov8/metrics.py) | `TrackingMetrics.get_fps()` | Rolling average `(1.0 / avg_time)` |
-| **Unique Person Counting** | [`tracker.py`](file:///d:/yolov8/tracker.py) | `PersonTracker.unique_ids` | `self.unique_ids.add(track_id)` |
-| **Frame Pipeline & Visuals** | [`pipeline.py`](file:///d:/yolov8/pipeline.py) | `process_frame()` & `draw_tracks()` | Bounding boxes & `ID: X \| Person \| Y.YY` |
+| File | Lines | Responsibility |
+| :--- | :--- | :--- |
+| [**`app.py`**](file:///app.py) | ~60 | Minimal Streamlit UI (Upload button + video frame display). Zero HTML/CSS. |
+| [**`pipeline.py`**](file:///pipeline.py) | ~55 | Coordinates the chain: Detect ➔ Track ➔ Identity ➔ Draw ➔ FPS. |
+| [**`detector.py`**](file:///detector.py) | ~38 | Loads YOLOv8 and filters bounding boxes for `person` class. |
+| [**`tracker.py`**](file:///tracker.py) | ~34 | Initializes ByteTrack and performs multi-object frame association. |
+| [**`identity_manager.py`**](file:///identity_manager.py) | ~75 | Manages persistent IDs (`P001`, `P002`...) across frames and re-entries. |
+| [**`metrics.py`**](file:///metrics.py) | ~24 | Computes rolling average FPS. |
 
 ---
 
-## 5. Directory Structure
+## 5. Clean Directory Structure
 
 ```text
-d:/yolov8/
-│
 ├── models/
 │   └── best.pt               # Trained YOLOv8 model weights
-├── input/
-│   └── sample.mp4            # Input video folder
-├── output/                   # Processed outputs directory
-├── detector.py               # YOLOv8 detection & person filtering logic
-├── tracker.py                # ByteTrack tracking integration
-├── metrics.py                # Rolling FPS & unique ID metrics
-├── pipeline.py               # Shared frame-by-frame processing pipeline
-├── app.py                    # Streamlit UI & OpenCV entry point
+├── detector.py               # Clean YOLOv8 person detection (~40 lines)
+├── tracker.py                # Clean ByteTrack tracking (~44 lines)
+├── identity_manager.py       # Clean persistent person ID (P001, P002) (~76 lines)
+├── metrics.py                # Clean rolling FPS calculation (~22 lines)
+├── pipeline.py               # Clean frame processing pipeline (~78 lines)
+├── app.py                    # Clean Streamlit UI with Upload + Output only (~53 lines)
 ├── requirements.txt          # Project dependencies
 └── README.md                 # Documentation
 ```

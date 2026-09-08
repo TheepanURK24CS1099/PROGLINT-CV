@@ -1,108 +1,100 @@
 import time
 import cv2
+from detector import load_detector, detect_persons
+from tracker import init_tracker, track_persons
 from identity_manager import IdentityManager
+from metrics import TrackingMetrics
 
+
+# =====================================================================
+# STEP 4: DRAW BOUNDING BOXES & LABELS ON FRAME
+# =====================================================================
 def draw_tracks(frame, tracked_persons):
-    """
-    Draws bounding boxes and labels for tracked persons.
-
-    Label format: ID: P001 | Person | 0.91
-    """
-    annotated_frame = frame.copy()
-    box_color = (255, 144, 30)  # BGR color for bounding box (cyan/orange hue)
-    text_color = (255, 255, 255) # White text
+    """Draws bounding boxes and persistent ID labels (e.g. ID: P001 | Person | 0.95)."""
+    annotated = frame.copy()
+    box_color = (0, 255, 0)  # Green in BGR
 
     for person in tracked_persons:
-        bbox = person['bbox']
+        x1, y1, x2, y2 = map(int, person['bbox'])
         display_id = person.get('person_id', person['track_id'])
         conf = person['conf']
 
-        x1, y1, x2, y2 = map(int, bbox)
+        # 1. Bounding box
+        cv2.rectangle(annotated, (x1, y1), (x2, y2), box_color, 2)
 
-        # 1. Draw Bounding Box
-        cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), box_color, 2)
-
-        # 2. Prepare Label: ID: P001 | Person | Y.YY
+        # 2. Label badge
         label = f"ID: {display_id} | Person | {conf:.2f}"
-
-        # 3. Label Background Box
         (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 2)
-        label_y1 = max(0, y1 - h - 10)
-        label_y2 = max(h + 10, y1)
-        cv2.rectangle(annotated_frame, (x1, label_y1), (x1 + w + 10, label_y2), box_color, -1)
+        label_y1 = max(0, y1 - h - 8)
+        cv2.rectangle(annotated, (x1, label_y1), (x1 + w + 6, y1), box_color, -1)
+        cv2.putText(annotated, label, (x1 + 3, y1 - 4),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 2, cv2.LINE_AA)
 
-        # 4. Text Overlay
-        text_y = label_y2 - 5
-        cv2.putText(
-            annotated_frame,
-            label,
-            (x1 + 5, text_y),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.55,
-            text_color,
-            2,
-            cv2.LINE_AA
-        )
-
-    return annotated_frame
+    return annotated
 
 
-def process_frame(frame, detector, tracker, metrics, conf_threshold: float = 0.5, identity_manager: IdentityManager = None):
+# =====================================================================
+# STEP 5: PROCESS SINGLE FRAME (STANDALONE FUNCTION)
+# =====================================================================
+def process_frame(frame, model, tracker, identity_manager, metrics, conf_thresh: float = 0.5):
     """
-    Common frame processing pipeline function used for both Video Upload and Webcam inputs.
-
-    Steps:
-    1. Read frame
-    2. Run YOLOv8
-    3. Keep only person detections
-    4. Apply confidence threshold
-    5. Send detections to ByteTrack
-    6. Receive tracked objects with temporary Track IDs
-    7. Map temporary Track IDs to persistent Person IDs (IdentityManager)
-    8. Draw bounding boxes and persistent Person IDs
-    9. Calculate FPS & update metrics
-    10. Return annotated frame & metrics
-
-    Returns:
-        annotated_frame: Frame with drawn bounding boxes and persistent IDs
-        frame_metrics: Dict with current count, total unique count, and processing FPS
+    Step-by-step frame processing:
+    1. Detect persons with YOLOv8
+    2. Track with ByteTrack
+    3. Update persistent person IDs (P001, P002...)
+    4. Draw bounding boxes & labels
+    5. Update processing FPS
     """
     start_time = time.time()
 
-    # STEP 2 & 3 & 4: YOLOv8 Detection & Person Filtering
-    person_boxes = detector.detect_persons(frame, conf_threshold=conf_threshold)
+    # Step 1: Detect
+    boxes = detect_persons(model, frame, conf_thresh=conf_thresh)
 
-    # STEP 5 & 6: ByteTrack Tracking
-    tracked_persons = tracker.track_persons(person_boxes, frame)
+    # Step 2: Track
+    tracks = track_persons(tracker, boxes, frame)
 
-    # STEP 7: Identity Persistence & Person Re-Identification
-    if identity_manager is None:
-        if not hasattr(tracker, 'identity_manager'):
-            tracker.identity_manager = IdentityManager()
-        identity_manager = tracker.identity_manager
+    # Step 3: Identity Persistence
+    if identity_manager is not None:
+        tracks = identity_manager.update(tracks, frame)
 
-    tracked_persons = identity_manager.update(tracked_persons, frame)
+    # Step 4: Draw
+    annotated_frame = draw_tracks(frame, tracks)
 
-    # STEP 8: Visualization
-    annotated_frame = draw_tracks(frame, tracked_persons)
-
-    end_time = time.time()
-    process_duration = end_time - start_time
-
-    # STEP 9 & 10: Calculate FPS and Update Metrics
-    total_unique = identity_manager.get_total_unique_count() if identity_manager is not None else tracker.get_total_unique_count()
-    metrics.update(
-        process_duration,
-        tracked_persons,
-        total_unique
-    )
+    # Step 5: Metrics
+    elapsed = time.time() - start_time
+    if metrics is not None:
+        metrics.update(elapsed)
 
     frame_metrics = {
-        'current_people': len(tracked_persons),
-        'total_unique': total_unique,
-        'fps': metrics.get_fps(),
-        'tracks': tracked_persons
+        'active_count': len(tracks),
+        'total_unique': identity_manager.get_total_unique_count() if identity_manager else len(tracks),
+        'fps': metrics.get_fps() if metrics else 0.0
     }
-
     return annotated_frame, frame_metrics
 
+
+# =====================================================================
+# UNIFIED TRACKING PIPELINE CLASS
+# =====================================================================
+class TrackingPipeline:
+    """Combines detector, tracker, identity manager, and metrics into one object."""
+    def __init__(self, model_path: str = "models/best.pt"):
+        self.model = load_detector(model_path)
+        self.tracker = init_tracker()
+        self.identity_manager = IdentityManager()
+        self.metrics = TrackingMetrics()
+
+    def process(self, frame, conf_thresh: float = 0.5):
+        annotated_frame, frame_metrics = process_frame(
+            frame, self.model, self.tracker, self.identity_manager, self.metrics, conf_thresh=conf_thresh
+        )
+        stats = {
+            'active': frame_metrics['active_count'],
+            'total': frame_metrics['total_unique'],
+            'fps': frame_metrics['fps']
+        }
+        return annotated_frame, stats
+
+    @property
+    def total_unique_count(self) -> int:
+        return self.identity_manager.get_total_unique_count()
