@@ -4,23 +4,31 @@ import cv2
 class PersonCounter:
     """
     Manages Person IN/OUT Counting by detecting when tracked persons cross a configurable counting line.
-    Prevents duplicate counts using per-track position history and discrete side-state tracking.
+    Prevents duplicate counts using per-track position history, discrete side-state tracking,
+    and ByteTrack track_id state keying.
     """
-    def __init__(self, line_position: float = 0.5):
+    def __init__(self, line_position: float = 0.5, max_disappeared_frames: int = 30):
         # This code is used to store the counting line position ratio relative to frame height (0.0 to 1.0)
         self.line_position = line_position
         
-        # This code is used to maintain cumulative IN and OUT crossing counts for person IN/OUT counting
+        # This code is used to maintain cumulative IN and OUT line-crossing event counts
         self.in_count = 0
         self.out_count = 0
 
-        # This code is used to store the previous center position (cx, cy) of each tracked person
-        # so that we can detect whether the person actually crossed the counting line.
+        # This code is used to store the previous center position (cx, cy) keyed strictly by ByteTrack track_id
         self.previous_positions = {}
 
-        # This code is used to maintain the side state ('ABOVE' or 'BELOW') for each tracked person
-        # to guarantee that a single line crossing event triggers exactly one count.
+        # This code is used to maintain the side state ('ABOVE' or 'BELOW') keyed strictly by ByteTrack track_id
+        # to guarantee that a single line crossing event produces exactly one counting event.
         self.track_side = {}
+
+        # This code is used to record the last frame index a ByteTrack track_id was observed
+        # to handle temporary track loss and prevent fake crossing counts upon track re-entry.
+        self.last_seen_frame = {}
+
+        # This code is used to track current frame index and maximum allowed track disappearance frames
+        self.current_frame = 0
+        self.max_disappeared_frames = max_disappeared_frames
 
     def set_line_position(self, line_position: float):
         # This code is used to dynamically update the counting line position ratio when adjusted in the UI
@@ -28,51 +36,59 @@ class PersonCounter:
 
     def update(self, tracked_persons: list, frame_shape: tuple):
         """
-        Updates tracking positions and detects line crossings for person IN/OUT counting.
+        Updates tracking positions and detects line crossings for person IN/OUT counting using ByteTrack track_id.
         """
+        self.current_frame += 1
         height, width = frame_shape[:2]
 
         # This code is used to calculate the Y-coordinate of the horizontal counting line for person IN/OUT counting
         line_y = int(height * self.line_position)
 
         for person in tracked_persons:
-            # Using person_id (e.g., 'P001') if available, or track_id for tracking state consistency
-            track_id = person.get('person_id', person['track_id'])
+            # IMPORTANT: Use raw ByteTrack track_id for crossing state to ensure separate independent track state
+            track_id = int(person['track_id'])
             bbox = person['bbox']
 
-            # This code is used to calculate the center point of the person's bounding box for IN/OUT counting
+            # This code is used to calculate the center point (cx, cy) of the person's bounding box for IN/OUT counting
             x1, y1, x2, y2 = bbox
             cx = float((x1 + x2) / 2.0)
             cy = float((y1 + y2) / 2.0)
 
-            # Determine current side relative to the counting line: 'ABOVE' (cy < line_y) or 'BELOW' (cy >= line_y)
+            # Determine current side relative to counting line:
+            # 'ABOVE' (cy < line_y) -> Entry / Outside region
+            # 'BELOW' (cy >= line_y) -> Inside region
             current_side = 'ABOVE' if cy < line_y else 'BELOW'
 
-            # This code is used to check whether the tracked person's center crossed the counting line
-            # and determine the IN or OUT direction without duplicate counting.
-            if track_id in self.track_side:
+            # This code is used to check whether the track_id was previously lost for too many frames.
+            # If a track was missing for > max_disappeared_frames, re-initialize state without counting a fake crossing event.
+            frames_since_last_seen = self.current_frame - self.last_seen_frame.get(track_id, self.current_frame)
+            track_was_lost = frames_since_last_seen > self.max_disappeared_frames
+
+            # This code is used to detect line crossing transitions (ABOVE <-> BELOW) for person IN/OUT counting
+            if track_id in self.track_side and not track_was_lost:
                 previous_side = self.track_side[track_id]
 
-                # Detect top-to-bottom crossing across counting line (Moving DOWN -> IN direction)
+                # Detect top-to-bottom line crossing transition (Moving DOWN: ABOVE -> BELOW => IN count +1)
                 if previous_side == 'ABOVE' and current_side == 'BELOW':
                     self.in_count += 1
                     self.track_side[track_id] = 'BELOW'
 
-                # Detect bottom-to-top crossing across counting line (Moving UP -> OUT direction)
+                # Detect bottom-to-top line crossing transition (Moving UP: BELOW -> ABOVE => OUT count +1)
                 elif previous_side == 'BELOW' and current_side == 'ABOVE':
                     self.out_count += 1
                     self.track_side[track_id] = 'ABOVE'
             else:
-                # First time person is detected: initialize side state without triggering false count
+                # First observation or re-appearance after track loss: initialize side state without incrementing counters
                 self.track_side[track_id] = current_side
 
-            # This code is used to store updated center position for that track_id for person IN/OUT counting
+            # This code is used to update previous center position and last seen frame for this ByteTrack track_id
             self.previous_positions[track_id] = (cx, cy)
+            self.last_seen_frame[track_id] = self.current_frame
 
         return tracked_persons
 
     def get_counts(self) -> dict:
-        # This code is used to calculate currently inside people count (IN - OUT) for person IN/OUT counting
+        # This code is used to calculate currently inside people count (INSIDE = IN - OUT) for person IN/OUT counting
         currently_inside = max(0, self.in_count - self.out_count)
         return {
             'in': self.in_count,
@@ -120,8 +136,10 @@ class PersonCounter:
         return annotated
 
     def reset(self):
-        # This code is used to reset all counters and position histories for person IN/OUT counting
+        # This code is used to reset all counters and track state histories for person IN/OUT counting
         self.in_count = 0
         self.out_count = 0
+        self.current_frame = 0
         self.previous_positions.clear()
         self.track_side.clear()
+        self.last_seen_frame.clear()

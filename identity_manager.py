@@ -31,7 +31,13 @@ class IdentityManager:
 
     # Step 2: Update identities for the current frame
     def update(self, tracked_persons, frame):
-        current_frame_person_ids = set()
+        # This code is used to collect all persistent person IDs currently active on visible tracks
+        # to prevent duplicate persistent ID assignments (e.g. assigning P003 to two simultaneous tracks).
+        active_track_ids = {p['track_id'] for p in tracked_persons}
+        occupied_person_ids = {
+            self.track_to_person[tid] for tid in active_track_ids if tid in self.track_to_person
+        }
+        current_frame_person_ids = set(occupied_person_ids)
 
         for person in tracked_persons:
             track_id = person['track_id']
@@ -48,7 +54,8 @@ class IdentityManager:
 
                 if hist is not None:
                     for pid, stored_hist in self.person_appearances.items():
-                        if pid not in current_frame_person_ids:  # Person was off-screen
+                        # Prevent assigning an ID that is currently in use by another active track
+                        if pid not in current_frame_person_ids:
                             similarity = cv2.compareHist(hist, stored_hist, cv2.HISTCMP_CORREL)
                             if similarity > best_similarity:
                                 best_similarity = similarity
