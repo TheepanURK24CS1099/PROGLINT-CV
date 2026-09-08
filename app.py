@@ -17,7 +17,7 @@ st.set_page_config(
     page_title="YOLOv8 + ByteTrack Person Tracker",
     page_icon="🤖",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 # Professional Computer-Vision Dashboard CSS
@@ -28,6 +28,17 @@ st.markdown("""
         background-color: #0B0F17;
         color: #F8FAFC;
         font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+
+    /* Sidebar Styling */
+    section[data-testid="stSidebar"] {
+        background-color: #0E1420 !important;
+        border-right: 1px solid #1F2937 !important;
+    }
+    section[data-testid="stSidebar"] .block-container {
+        padding-top: 1.5rem !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
     }
 
     /* Hide default padding & stream element chrome */
@@ -314,56 +325,16 @@ def main():
 
     model_info = detector.get_model_info()
 
-    # Session state for tracking control
+    # Session state for tracking control & AI video playback
     if "tracking_active" not in st.session_state:
         st.session_state.tracking_active = False
+    if "ai_video_path" not in st.session_state:
+        st.session_state.ai_video_path = None
 
     # ==========================================
-    # MAIN TWO-COLUMN DASHBOARD LAYOUT
+    # LEFT SLIDING SIDEBAR: CONTROL PANEL
     # ==========================================
-    col_video, col_controls = st.columns([65, 35])
-
-    # ------------------------------------------
-    # LEFT COLUMN: LIVE TRACKING VIDEO PANEL
-    # ------------------------------------------
-    with col_video:
-        live_status_html = '<span style="color: #10B981; font-weight: 700;">● LIVE</span>' if st.session_state.tracking_active else '<span style="color: #64748B;">● STANDBY</span>'
-        st.markdown(f"""
-            <div class="dashboard-card" style="padding-bottom: 12px;">
-                <div class="card-title">
-                    <span>LIVE TRACKING</span>
-                    <span>{live_status_html}</span>
-                </div>
-        """, unsafe_allow_html=True)
-
-        video_placeholder = st.empty()
-
-        # Display empty state if not actively tracking
-        if not st.session_state.tracking_active:
-            video_placeholder.markdown("""
-                <div class="video-empty-state">
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                        <polygon points="23 7 16 12 23 17 23 7"></polygon>
-                        <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
-                    </svg>
-                    <div class="video-empty-title">No video selected</div>
-                    <div class="video-empty-desc">Upload a video file or start your webcam from the control panel to begin person tracking.</div>
-                </div>
-            """, unsafe_allow_html=True)
-
-        video_footer_ph = st.empty()
-        video_footer_ph.markdown("""
-            <div class="video-footer-bar">
-                <span>FPS: <strong>0.0</strong></span>
-                <span>Resolution: <strong>-- × --</strong></span>
-            </div>
-            </div>
-        """, unsafe_allow_html=True)
-
-    # ------------------------------------------
-    # RIGHT COLUMN: CONTROL PANEL & SYSTEM INFO
-    # ------------------------------------------
-    with col_controls:
+    with st.sidebar:
         st.markdown('<div class="dashboard-card"><div class="card-title">CONTROL PANEL</div>', unsafe_allow_html=True)
 
         # 1. INPUT SOURCE SELECTION
@@ -447,6 +418,95 @@ def main():
         """, unsafe_allow_html=True)
 
     # ==========================================
+    # MAIN AREA: VIDEO COMPARISON SECTION
+    # ==========================================
+    st.markdown("""
+        <div style="text-align: center; margin: 0 0 16px 0; background: linear-gradient(90deg, #111827 0%, #1E293B 100%); border: 1px solid #1F2937; border-radius: 10px; padding: 10px;">
+            <span style="font-size: 1.15rem; font-weight: 800; letter-spacing: 0.12em; color: #F8FAFC; text-transform: uppercase;">
+                VIDEO COMPARISON
+            </span>
+        </div>
+    """, unsafe_allow_html=True)
+
+    col_orig, col_ai = st.columns(2)
+
+    with col_orig:
+        st.markdown("""
+            <div class="dashboard-card" style="padding-bottom: 12px; margin-bottom: 10px;">
+                <div class="card-title">
+                    <span>ORIGINAL VIDEO</span>
+                    <span style="color: #94A3B8; font-size: 0.78rem;">RAW INPUT</span>
+                </div>
+        """, unsafe_allow_html=True)
+        orig_video_ph = st.empty()
+        orig_footer_ph = st.empty()
+        orig_footer_ph.markdown("""
+            <div class="video-footer-bar">
+                <span>Stream: <strong>Original</strong></span>
+                <span>Type: <strong>Raw Video</strong></span>
+            </div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    with col_ai:
+        live_status_html = '<span style="color: #10B981; font-weight: 700;">● LIVE</span>' if st.session_state.tracking_active else '<span style="color: #64748B;">● STANDBY</span>'
+        st.markdown(f"""
+            <div class="dashboard-card" style="padding-bottom: 12px; margin-bottom: 10px;">
+                <div class="card-title">
+                    <span>AI-GENERATED VIDEO</span>
+                    <span>{live_status_html}</span>
+                </div>
+        """, unsafe_allow_html=True)
+        ai_video_ph = st.empty()
+        ai_footer_ph = st.empty()
+        ai_footer_ph.markdown("""
+            <div class="video-footer-bar">
+                <span>FPS: <strong>0.0</strong></span>
+                <span>Resolution: <strong>-- × --</strong></span>
+            </div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    # Initial / Standby display state
+    if not st.session_state.tracking_active:
+        if source_type == "Upload Video" and video_path and os.path.exists(video_path):
+            orig_video_ph.video(video_path)
+            if st.session_state.ai_video_path and os.path.exists(st.session_state.ai_video_path):
+                ai_video_ph.video(st.session_state.ai_video_path)
+            else:
+                ai_video_ph.markdown("""
+                    <div class="video-empty-state">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <polygon points="23 7 16 12 23 17 23 7"></polygon>
+                            <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+                        </svg>
+                        <div class="video-empty-title">Ready for AI Tracking</div>
+                        <div class="video-empty-desc">Click <strong>Start Tracking</strong> in the control panel to generate side-by-side detections.</div>
+                    </div>
+                """, unsafe_allow_html=True)
+        else:
+            orig_video_ph.markdown("""
+                <div class="video-empty-state">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="23 7 16 12 23 17 23 7"></polygon>
+                        <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+                    </svg>
+                    <div class="video-empty-title">No video selected</div>
+                    <div class="video-empty-desc">Upload a video file or select webcam from the left control panel.</div>
+                </div>
+            """, unsafe_allow_html=True)
+            ai_video_ph.markdown("""
+                <div class="video-empty-state">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="23 7 16 12 23 17 23 7"></polygon>
+                        <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+                    </svg>
+                    <div class="video-empty-title">AI Video Output</div>
+                    <div class="video-empty-desc">Detections with persistent IDs will stream here side-by-side.</div>
+                </div>
+            """, unsafe_allow_html=True)
+
+    # ==========================================
     # LIVE STATISTICS CARDS (3 PRIMARY METRICS)
     # ==========================================
     stat_col1, stat_col2, stat_col3 = st.columns(3)
@@ -501,7 +561,7 @@ def main():
 
         rows_html = ""
         for t in tracks_list:
-            t_id = f"{t['track_id']:02d}"
+            t_id = str(t.get('person_id', t['track_id']))
             t_conf = f"{t['conf']:.2f}"
             rows_html += f"""
                 <tr>
@@ -555,6 +615,11 @@ def main():
                 st.session_state.tracking_active = False
                 return
 
+        os.makedirs("output", exist_ok=True)
+        raw_out_path = os.path.join("output", "temp_ai_tracked.mp4")
+        final_ai_video = os.path.join("output", "ai_generated_playback.mp4")
+        writer = None
+
         # Frame loop
         while cap.isOpened() and st.session_state.tracking_active:
             ret, frame = cap.read()
@@ -563,36 +628,68 @@ def main():
 
             h, w = frame.shape[:2]
 
-            # Process frame using existing CV pipeline
+            # Initialize video writer for AI output playback if processing a video file
+            if writer is None and source_type == "Upload Video":
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                fps_val = cap.get(cv2.CAP_PROP_FPS) or 25.0
+                writer = cv2.VideoWriter(raw_out_path, fourcc, fps_val, (w, h))
+
+            # 1. Update Original Video Frame (Left Side)
+            frame_orig_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            orig_video_ph.image(frame_orig_rgb, channels="RGB", use_container_width=True)
+
+            # 2. Process frame using existing CV pipeline (Detection + Tracking + Re-ID)
             annotated_frame, frame_metrics = process_frame(
                 frame, detector, tracker, metrics, conf_threshold=conf_threshold
             )
 
-            # 1. Update Video Frame
-            frame_rgb = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
-            video_placeholder.image(frame_rgb, channels="RGB", use_container_width=True)
+            if writer is not None:
+                writer.write(annotated_frame)
 
-            # 2. Update Resolution & FPS Bar
-            video_footer_ph.markdown(f"""
+            # 3. Update AI Annotated Frame (Right Side)
+            annotated_rgb = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
+            ai_video_ph.image(annotated_rgb, channels="RGB", use_container_width=True)
+
+            # 4. Update Footers
+            orig_footer_ph.markdown(f"""
                 <div class="video-footer-bar">
-                    <span>FPS: <strong>{frame_metrics['fps']:.1f}</strong></span>
+                    <span>Stream: <strong>Raw Input</strong></span>
                     <span>Resolution: <strong>{w} × {h}</strong></span>
+                </div>
                 </div>
             """, unsafe_allow_html=True)
 
-            # 3. Update Statistics Cards
+            ai_footer_ph.markdown(f"""
+                <div class="video-footer-bar">
+                    <span>FPS: <strong>{frame_metrics['fps']:.1f}</strong></span>
+                    <span>Active: <strong>{frame_metrics['current_people']}</strong></span>
+                </div>
+                </div>
+            """, unsafe_allow_html=True)
+
+            # 5. Update Statistics Cards & Track Table
             update_stats_display(
                 frame_metrics['current_people'],
                 frame_metrics['total_unique'],
                 frame_metrics['fps']
             )
-
-            # 4. Update Tracked Persons Table
             update_tracks_table(frame_metrics.get('tracks', []))
 
         cap.release()
+        if writer is not None:
+            writer.release()
+            # Fast convert with ffmpeg for seamless browser playback
+            ffmpeg_path = "/Users/theepan/.local/bin/ffmpeg" if os.path.exists("/Users/theepan/.local/bin/ffmpeg") else "ffmpeg"
+            os.system(f"{ffmpeg_path} -y -i {raw_out_path} -vcodec libx264 -pix_fmt yuv420p -movflags +faststart {final_ai_video} -loglevel quiet")
+            if os.path.exists(final_ai_video):
+                st.session_state.ai_video_path = final_ai_video
+            else:
+                st.session_state.ai_video_path = raw_out_path
+
         st.session_state.tracking_active = False
+        st.rerun()
 
 
 if __name__ == "__main__":
     main()
+
