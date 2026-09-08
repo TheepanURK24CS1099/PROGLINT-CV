@@ -1,6 +1,6 @@
-# YOLOv8 + ByteTrack Person Detection and Tracking Application
+# YOLOv8 + ByteTrack Person Detection, Tracking & IN/OUT Counting Application
 
-A lightweight, real-time **Person Detection and Tracking Application** combining custom trained **YOLOv8** object detection with the **ByteTrack** multi-object tracking algorithm.
+A lightweight, real-time **Person Detection, Tracking & IN/OUT Counting Application** combining custom trained **YOLOv8** object detection with **ByteTrack** multi-object tracking and configurable counting-line crossing detection.
 
 ---
 
@@ -10,26 +10,33 @@ A lightweight, real-time **Person Detection and Tracking Application** combining
 Input (Video / Webcam)
           │
           ▼
-   YOLOv8 Detection
+   YOLOv8 Detection (detector.py)
  (Where is a person?)
           │
           ▼
-  Person Filtering
- (Filter class == 'person')
+   Person Filtering (Filter class == 'person')
           │
           ▼
-      ByteTrack
+       ByteTrack (tracker.py)
  (Is this the same person?)
           │
           ▼
-   Track ID Mapping
+ Identity Management (identity_manager.py)
+ (Persistent IDs: P001, P002...)
           │
           ▼
-    Visualization & Metrics
+   Person Counter (person_counter.py)
+ (Crossed counting line? IN / OUT +1)
+          │
+          ▼
+ Visualization & Streamlit UI (app.py)
+ (IN: X  |  OUT: Y  |  INSIDE: Z)
 ```
 
 * **YOLOv8 (`detector.py`)**: Responsible for **Person Detection** — locates objects in each frame and produces bounding boxes, class labels, and detection confidence scores. Filters strictly for the `person` class.
 * **ByteTrack (`tracker.py`)**: Responsible for **Person Tracking** — assigns persistent unique Track IDs to detected persons across consecutive frames using Kalman filter motion predictions and Hungarian association matching.
+* **Identity Manager (`identity_manager.py`)**: Manages persistent Person IDs (`P001`, `P002`...) using HSV color histograms.
+* **Person Counter (`person_counter.py`)**: Responsible for **Person IN/OUT Counting** — calculates bounding box centers, tracks side state relative to a configurable counting line (`ABOVE` / `BELOW`), and increments `IN` (moving down) or `OUT` (moving up) counts exactly once per crossing event.
 
 ---
 
@@ -39,8 +46,6 @@ The application automatically locates and uses your existing trained YOLOv8 `.pt
 
 * Primary path: `models/best.pt`
 * Fallback path: `best.pt`
-
-> **Note:** The existing trained `.pt` model is loaded directly without downloading, fine-tuning, or altering model weights.
 
 ---
 
@@ -54,13 +59,7 @@ pip install -r requirements.txt
 ### Step 2: Run the Web UI (Recommended)
 Launch the Streamlit user interface:
 ```bash
-streamlit run app.py
-```
-
-### Step 3: Alternative OpenCV Window Mode (CLI)
-You can also run directly with Python:
-```bash
-python app.py
+python -m streamlit run app.py
 ```
 
 ---
@@ -69,12 +68,14 @@ python app.py
 
 | File | Lines | Responsibility |
 | :--- | :--- | :--- |
-| [**`app.py`**](file:///app.py) | ~60 | Minimal Streamlit UI (Upload button + video frame display). Zero HTML/CSS. |
-| [**`pipeline.py`**](file:///pipeline.py) | ~55 | Coordinates the chain: Detect ➔ Track ➔ Identity ➔ Draw ➔ FPS. |
-| [**`detector.py`**](file:///detector.py) | ~38 | Loads YOLOv8 and filters bounding boxes for `person` class. |
-| [**`tracker.py`**](file:///tracker.py) | ~34 | Initializes ByteTrack and performs multi-object frame association. |
-| [**`identity_manager.py`**](file:///identity_manager.py) | ~75 | Manages persistent IDs (`P001`, `P002`...) across frames and re-entries. |
-| [**`metrics.py`**](file:///metrics.py) | ~24 | Computes rolling average FPS. |
+| [**`app.py`**](file:///app.py) | ~40 | Streamlit UI with file uploader, counting line slider, and IN/OUT/INSIDE metric displays. |
+| [**`pipeline.py`**](file:///pipeline.py) | ~110 | Coordinates the chain: Detect ➔ Track ➔ Identity ➔ Counter ➔ Draw ➔ FPS. |
+| [**`person_counter.py`**](file:///person_counter.py) | ~130 | Line crossing detection, side state tracking, duplicate count prevention, overlay drawing. |
+| [**`detector.py`**](file:///detector.py) | ~40 | Loads YOLOv8 and filters bounding boxes for `person` class. |
+| [**`tracker.py`**](file:///tracker.py) | ~45 | Initializes ByteTrack and performs multi-object frame association. |
+| [**`identity_manager.py`**](file:///identity_manager.py) | ~77 | Manages persistent IDs (`P001`, `P002`...) across frames and re-entries. |
+| [**`metrics.py`**](file:///metrics.py) | ~23 | Computes rolling average FPS. |
+| [**`test_counter.py`**](file:///test_counter.py) | ~55 | Unit tests for PersonCounter line crossing and duplicate prevention scenarios. |
 
 ---
 
@@ -84,11 +85,13 @@ python app.py
 ├── models/
 │   └── best.pt               # Trained YOLOv8 model weights
 ├── detector.py               # Clean YOLOv8 person detection (~40 lines)
-├── tracker.py                # Clean ByteTrack tracking (~44 lines)
-├── identity_manager.py       # Clean persistent person ID (P001, P002) (~76 lines)
-├── metrics.py                # Clean rolling FPS calculation (~22 lines)
-├── pipeline.py               # Clean frame processing pipeline (~78 lines)
-├── app.py                    # Clean Streamlit UI with Upload + Output only (~53 lines)
+├── tracker.py                # Clean ByteTrack tracking (~45 lines)
+├── identity_manager.py       # Clean persistent person ID (P001, P002) (~77 lines)
+├── person_counter.py         # Person IN/OUT counting & line crossing (~130 lines)
+├── metrics.py                # Clean rolling FPS calculation (~23 lines)
+├── pipeline.py               # Clean frame processing pipeline (~110 lines)
+├── app.py                    # Clean Streamlit UI with Upload + Output + Slider (~40 lines)
+├── test_counter.py           # Unit tests for IN/OUT counting logic (~55 lines)
 ├── requirements.txt          # Project dependencies
 └── README.md                 # Documentation
 ```
@@ -97,15 +100,13 @@ python app.py
 
 ## 6. Testing Procedure
 
-1. **Video File Test**:
-   - Run `streamlit run app.py`
-   - Choose **Upload Video**
-   - Upload any video file (`.mp4`, `.avi`, `.mov`, `.mkv`) or use `input/sample.mp4`
-   - Adjust the **Confidence Threshold** slider (default `0.50`)
-   - Click **Start Tracking**
-   - Verify bounding boxes appear with labels formatted as `ID: X | Person | 0.XX`, processing FPS is displayed, and `Total Unique People` increments correctly.
+1. **Unit Test Verification**:
+   - Run `python test_counter.py` to test line crossing scenarios (IN, OUT, INSIDE, and duplicate prevention).
 
-2. **Webcam Test**:
-   - Select **Start Webcam**
-   - Click **Start Tracking**
-   - Move in front of the camera to verify track ID persistence and detection.
+2. **Video File Test**:
+   - Run `python -m streamlit run app.py`
+   - Open browser at `http://localhost:8501`
+   - Adjust the **Counting Line Position Ratio** slider (default `0.50`)
+   - Upload any video file (`.mp4`, `.avi`, `.mov`, `.mkv`)
+   - Verify bounding boxes appear with labels formatted as `ID: P001 | Person | 0.95`, the orange counting line is rendered, and live counts (`IN`, `OUT`, `INSIDE`) increment accurately upon crossing the line.
+
