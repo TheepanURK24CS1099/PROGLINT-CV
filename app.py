@@ -1,31 +1,64 @@
-import tempfile, cv2, streamlit as st
+import os
+import tempfile
+import cv2
+import streamlit as st
 from pipeline import TrackingPipeline
 
+# 1. UI Setup & Page Configuration
+st.set_page_config(page_title="PROGLINT-CV Person Counter", layout="centered")
 st.title("Person Tracker")
 
-# 1. Upload Video (Only element on the page)
+# Load external styling from dedicated style.css file
+if os.path.exists("style.css"):
+    with open("style.css") as f:
+        st.html(f"<style>{f.read()}</style>")
+
+# 2. Video File Upload Workflow
 video_file = st.file_uploader("Upload a Video", type=["mp4", "avi", "mov", "mkv"])
 
-# 2. Output (Automatically starts when file is uploaded)
 if video_file:
+    # Save uploaded video to a temporary file
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as f:
         f.write(video_file.getbuffer())
         video_path = f.name
 
-    pipeline = TrackingPipeline("models/best.pt")
+    # Initialize tracking pipeline
+    pipeline = TrackingPipeline("models/mot17_best.pt", line_position=0.5)
     cap = cv2.VideoCapture(video_path)
-    
-    video_display = st.empty()
-    status_display = st.empty()
 
+    # Rectangular container box for video display and live metrics
+    video_box = st.container(border=True)
+    with video_box:
+        video_display = st.empty()
+        status_display = st.empty()
+
+    # Frame processing loop
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
             break
 
-        annotated_frame, stats = pipeline.process(frame)
-        video_display.image(cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB), use_container_width=True)
-        status_display.write(f"Active: **{stats['active']}** | Total Unique: **{stats['total']}** | FPS: **{stats['fps']:.1f}**")
+        # Process frame through detection, tracking, line-crossing counter, and rendering
+        annotated_frame, stats = pipeline.process(frame, conf_thresh=0.25)
+
+        # Scale frame for display so it fits nicely on screen in a clean rectangular box
+        disp_h, disp_w = annotated_frame.shape[:2]
+        max_h, max_w = 480, 640
+        scale = min(max_w / disp_w, max_h / disp_h, 1.0)
+        if scale < 1.0:
+            disp_frame = cv2.resize(annotated_frame, (int(disp_w * scale), int(disp_h * scale)), interpolation=cv2.INTER_AREA)
+        else:
+            disp_frame = annotated_frame
+
+        # Render rescaled frame and live statistics
+        video_display.image(cv2.cvtColor(disp_frame, cv2.COLOR_BGR2RGB))
+        status_display.markdown(
+            f"📥 **IN: {stats['in']}** | 📤 **OUT: {stats['out']}** | 🚪 **INSIDE: {stats['inside']}** | "
+            f"👥 **Total Unique: {stats['total']}** | ⚡ **FPS: {stats['fps']:.1f}**"
+        )
 
     cap.release()
-    st.success(f"Complete! Total unique people detected: {pipeline.total_unique_count}")
+    st.success(
+        f"Processing Complete! Final Counts ➔ IN: **{stats['in']}** | OUT: **{stats['out']}** | "
+        f"CURRENTLY INSIDE: **{stats['inside']}** | Total Unique People: **{pipeline.total_unique_count}**"
+    )

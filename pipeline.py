@@ -1,100 +1,100 @@
 import time
 import cv2
+from collections import deque
 from detector import load_detector, detect_persons
 from tracker import init_tracker, track_persons
-from identity_manager import IdentityManager
-from metrics import TrackingMetrics
+from person_counter import PersonCounter
 
 
 # =====================================================================
-# STEP 4: DRAW BOUNDING BOXES & LABELS ON FRAME
+# STEP 1: DRAW BOUNDING BOXES & LABELS ON FRAME
 # =====================================================================
-def draw_tracks(frame, tracked_persons):
-    """Draws bounding boxes and persistent ID labels (e.g. ID: P001 | Person | 0.95)."""
+def draw_tracks(frame, tracked_persons, person_counter=None):
+    """Draws bounding boxes, ByteTrack ID labels, and counting overlay on the frame."""
     annotated = frame.copy()
-    box_color = (0, 255, 0)  # Green in BGR
+    box_color = (0, 255, 0)  # Green box in BGR
 
     for person in tracked_persons:
         x1, y1, x2, y2 = map(int, person['bbox'])
-        display_id = person.get('person_id', person['track_id'])
+        track_id = person['track_id']
         conf = person['conf']
 
-        # 1. Bounding box
+        # This code draws bounding box around tracked person
         cv2.rectangle(annotated, (x1, y1), (x2, y2), box_color, 2)
 
-        # 2. Label badge
-        label = f"ID: {display_id} | Person | {conf:.2f}"
+        # This code draws text badge displaying ByteTrack track ID and confidence (e.g. ID: 7 | Person | 0.82)
+        label = f"ID: {track_id} | Person | {conf:.2f}"
         (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 2)
         label_y1 = max(0, y1 - h - 8)
         cv2.rectangle(annotated, (x1, label_y1), (x1 + w + 6, y1), box_color, -1)
         cv2.putText(annotated, label, (x1 + 3, y1 - 4),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 2, cv2.LINE_AA)
 
+    # This code draws horizontal counting line and IN/OUT/INSIDE stats overlay badge
+    if person_counter is not None:
+        annotated = person_counter.draw_counter_overlay(annotated)
+
     return annotated
 
 
 # =====================================================================
-# STEP 5: PROCESS SINGLE FRAME (STANDALONE FUNCTION)
-# =====================================================================
-def process_frame(frame, model, tracker, identity_manager, metrics, conf_thresh: float = 0.5):
-    """
-    Step-by-step frame processing:
-    1. Detect persons with YOLOv8
-    2. Track with ByteTrack
-    3. Update persistent person IDs (P001, P002...)
-    4. Draw bounding boxes & labels
-    5. Update processing FPS
-    """
-    start_time = time.time()
-
-    # Step 1: Detect
-    boxes = detect_persons(model, frame, conf_thresh=conf_thresh)
-
-    # Step 2: Track
-    tracks = track_persons(tracker, boxes, frame)
-
-    # Step 3: Identity Persistence
-    if identity_manager is not None:
-        tracks = identity_manager.update(tracks, frame)
-
-    # Step 4: Draw
-    annotated_frame = draw_tracks(frame, tracks)
-
-    # Step 5: Metrics
-    elapsed = time.time() - start_time
-    if metrics is not None:
-        metrics.update(elapsed)
-
-    frame_metrics = {
-        'active_count': len(tracks),
-        'total_unique': identity_manager.get_total_unique_count() if identity_manager else len(tracks),
-        'fps': metrics.get_fps() if metrics else 0.0
-    }
-    return annotated_frame, frame_metrics
-
-
-# =====================================================================
-# UNIFIED TRACKING PIPELINE CLASS
+# STEP 2: UNIFIED TRACKING PIPELINE CLASS
 # =====================================================================
 class TrackingPipeline:
-    """Combines detector, tracker, identity manager, and metrics into one object."""
-    def __init__(self, model_path: str = "models/best.pt"):
-        self.model = load_detector(model_path)
-        self.tracker = init_tracker()
-        self.identity_manager = IdentityManager()
-        self.metrics = TrackingMetrics()
+    """Combines YOLOv11 detector, ByteTrack tracker, and PersonCounter into a single pipeline."""
+    def __init__(self, model_path: str = "models/mot17_best.pt", line_position: float = 0.5):
+        # This code initializes YOLOv11 detector, ByteTrack tracker, PersonCounter, and FPS history buffer
+        self.model = load_detector(model_path)# initialize the model
+        self.tracker = init_tracker()# initialize the tracker
+        self.person_counter = PersonCounter(line_position=line_position)# initialize the counter
+        self.frame_times = deque(maxlen=30)# initialize the FPS history buffer
 
-    def process(self, frame, conf_thresh: float = 0.5):
-        annotated_frame, frame_metrics = process_frame(
-            frame, self.model, self.tracker, self.identity_manager, self.metrics, conf_thresh=conf_thresh
-        )
+    def set_line_position(self, line_pos: float):
+        # This code dynamically updates counting line position ratio
+        self.person_counter.set_line_position(line_pos)
+
+    def process(self, frame, conf_thresh: float = 0.45):
+        """Processes a single video frame and returns the annotated frame and metrics."""
+        start_time = time.time()
+
+        # Step 1: Detect persons using YOLOv11
+        boxes = detect_persons(self.model, frame, conf_thresh=conf_thresh)
+
+        # Step 2: Track persons using ByteTrack
+        tracks = track_persons(self.tracker, boxes, frame)
+
+        # Step 3: Update person counter using bottom-center anchor line crossing logic
+        tracks = self.person_counter.update(tracks, frame.shape)
+
+        # Step 4: Draw bounding boxes, track IDs, and counting line
+        annotated_frame = draw_tracks(frame, tracks, person_counter=self.person_counter)
+
+        # Step 5: Compute rolling average processing FPS
+        elapsed = time.time() - start_time
+        if elapsed > 0:
+            self.frame_times.append(elapsed)
+        avg_time = sum(self.frame_times) / len(self.frame_times) if self.frame_times else 0.0
+        fps = (1.0 / avg_time) if avg_time > 0 else 0.0
+
+        # Step 6: Compile live statistics dictionary (IN, OUT, INSIDE, Total Unique, FPS)
+        counts = self.person_counter.get_counts()
         stats = {
-            'active': frame_metrics['active_count'],
-            'total': frame_metrics['total_unique'],
-            'fps': frame_metrics['fps']
+            'active': len(tracks),
+            'total': counts['total_unique'],
+            'in': counts['in'],
+            'out': counts['out'],
+            'inside': counts['inside'],
+            'fps': fps
         }
+
         return annotated_frame, stats
+
+    def reset(self):
+        # This code resets counter state and FPS timing history
+        self.person_counter.reset()
+        self.frame_times.clear()
 
     @property
     def total_unique_count(self) -> int:
-        return self.identity_manager.get_total_unique_count()
+        # This code returns total number of unique ByteTrack IDs observed
+        return len(self.person_counter.unique_track_ids)
