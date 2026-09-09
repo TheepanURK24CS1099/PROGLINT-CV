@@ -5,8 +5,8 @@ import streamlit as st
 from pipeline import TrackingPipeline
 
 # 1. UI Setup & Page Configuration
-st.set_page_config(page_title="PROGLINT-CV Person Counter", layout="centered")
-st.title("Person Tracker")
+st.set_page_config(page_title="Person Counter", layout="centered")
+st.title("START-US Person Tracker")
 
 # Load external styling from dedicated style.css file
 if os.path.exists("style.css"):
@@ -53,8 +53,8 @@ if video_file:
         # Render rescaled frame and live statistics
         video_display.image(cv2.cvtColor(disp_frame, cv2.COLOR_BGR2RGB))
         status_display.markdown(
-            f"📥 **IN: {stats['in']}** | 📤 **OUT: {stats['out']}** | 🚪 **INSIDE: {stats['inside']}** | "
-            f"👥 **Total Unique: {stats['total']}** | ⚡ **FPS: {stats['fps']:.1f}**"
+            f"**IN: {stats['in']}** |  **OUT: {stats['out']}** |  **INSIDE: {stats['inside']}** | "
+            f"**Total Unique: {stats['total']}** | **FPS: {stats['fps']:.1f}**"
         )
 
     cap.release()
