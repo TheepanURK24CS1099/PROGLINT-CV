@@ -23,7 +23,7 @@ if video_file:
         video_path = f.name
 
     # Initialize tracking pipeline
-    pipeline = TrackingPipeline("models/mot17_best.pt", line_position=0.5)
+    pipeline = TrackingPipeline("200train.pt", line_position=0.5)
     cap = cv2.VideoCapture(video_path)
 
     # Rectangular container box for video display and live metrics
@@ -52,13 +52,13 @@ if video_file:
 
         # Render rescaled frame and live statistics
         video_display.image(cv2.cvtColor(disp_frame, cv2.COLOR_BGR2RGB))
+        # Display live IN, OUT, and INSIDE metrics
         status_display.markdown(
-            f"📥 **IN: {stats['in']}** | 📤 **OUT: {stats['out']}** | 🚪 **INSIDE: {stats['inside']}** | "
-            f"👥 **Total Unique: {stats['total']}** | ⚡ **FPS: {stats['fps']:.1f}**"
+            f"📥 **IN: {stats['in']}** | 📤 **OUT: {stats['out']}** | 🚪 **INSIDE: {stats['inside']}**"
         )
 
     cap.release()
     st.success(
         f"Processing Complete! Final Counts ➔ IN: **{stats['in']}** | OUT: **{stats['out']}** | "
-        f"CURRENTLY INSIDE: **{stats['inside']}** | Total Unique People: **{pipeline.total_unique_count}**"
+        f"CURRENTLY INSIDE: **{stats['inside']}**"
     )

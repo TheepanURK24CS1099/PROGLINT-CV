@@ -10,7 +10,9 @@ def load_detector(model_path: str = "models/mot17_best.pt"):
     """Loads and returns the trained YOLOv11 model."""
     # This code checks if the requested model weight file exists locally with fallback options
     if not os.path.exists(model_path):
-        if os.path.exists("mot17_best.pt"):
+        if os.path.exists("mot17_mot20_best.pt"):
+            model_path = "mot17_mot20_best.pt"
+        elif os.path.exists("mot17_best.pt"):
             model_path = "mot17_best.pt"
         elif os.path.exists("models/best.pt"):
             model_path = "models/best.pt"
@@ -35,7 +37,7 @@ def detect_persons(model, frame, conf_thresh: float = 0.25):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     
     # This code runs inference on the frame using YOLOv11
-    results = model(frame, conf=conf_thresh, device=device, verbose=False)
+    results = model(frame, conf=conf_thresh, device=device, verbose=False) #controlls log files 
     boxes = results[0].boxes
 
     if boxes is None or len(boxes) == 0:
