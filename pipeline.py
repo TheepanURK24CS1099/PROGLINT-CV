@@ -63,7 +63,7 @@ class TrackingPipeline:
         # Step 2: Track persons using ByteTrack
         tracks = track_persons(self.tracker, boxes, frame)
 
-        # Step 3: Update person counter using center-point line crossing logic
+        # Step 3: Update person counter using bottom-center anchor line crossing logic
         tracks = self.person_counter.update(tracks, frame.shape)
 
         # Step 4: Draw bounding boxes, track IDs, and counting line
