@@ -7,12 +7,7 @@ from pipeline import TrackingPipeline
 st.set_page_config(page_title="PROGLINT-CV Person Counter", layout="wide")
 st.title("🏃 Person Tracker & IN / OUT Counter")
 
-# 2. Sidebar Controls
-st.sidebar.header("Configuration")
-line_pos = st.sidebar.slider("Counting Line Position Ratio", min_value=0.1, max_value=0.9, value=0.5, step=0.05)
-conf_thresh = st.sidebar.slider("Confidence Threshold", min_value=0.1, max_value=0.9, value=0.5, step=0.05)
-
-# 3. Video File Upload Workflow
+# 2. Video File Upload Workflow
 video_file = st.file_uploader("Upload a Video", type=["mp4", "avi", "mov", "mkv"])
 
 if video_file:
@@ -21,8 +16,8 @@ if video_file:
         f.write(video_file.getbuffer())
         video_path = f.name
 
-    # Initialize tracking pipeline with YOLOv8, ByteTrack, and PersonCounter
-    pipeline = TrackingPipeline("models/best.pt", line_position=line_pos)
+    # Initialize tracking pipeline
+    pipeline = TrackingPipeline("models/mot17_best.pt", line_position=0.5)
     cap = cv2.VideoCapture(video_path)
 
     video_display = st.empty()
@@ -35,7 +30,7 @@ if video_file:
             break
 
         # Process frame through detection, tracking, line-crossing counter, and rendering
-        annotated_frame, stats = pipeline.process(frame, conf_thresh=conf_thresh)
+        annotated_frame, stats = pipeline.process(frame, conf_thresh=0.25)
         video_display.image(cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB), use_container_width=True)
 
         # Display live IN, OUT, INSIDE, Total Unique, and FPS metrics
@@ -49,3 +44,4 @@ if video_file:
         f"Processing Complete! Final Counts ➔ IN: **{stats['in']}** | OUT: **{stats['out']}** | "
         f"CURRENTLY INSIDE: **{stats['inside']}** | Total Unique People: **{pipeline.total_unique_count}**"
     )
+

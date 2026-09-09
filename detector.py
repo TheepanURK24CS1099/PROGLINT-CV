@@ -4,16 +4,20 @@ from ultralytics import YOLO
 
 
 # =====================================================================
-# STEP 1: LOAD YOLOv8 DETECTOR MODEL
+# STEP 1: LOAD YOLOv11 DETECTOR MODEL
 # =====================================================================
-def load_detector(model_path: str = "models/best.pt"):
-    """Loads and returns the trained YOLOv8 model."""
-    # This code checks if the requested model weight file exists locally
+def load_detector(model_path: str = "models/mot17_best.pt"):
+    """Loads and returns the trained YOLOv11 model."""
+    # This code checks if the requested model weight file exists locally with fallback options
     if not os.path.exists(model_path):
-        if os.path.exists("best.pt"):
+        if os.path.exists("mot17_best.pt"):
+            model_path = "mot17_best.pt"
+        elif os.path.exists("models/best.pt"):
+            model_path = "models/best.pt"
+        elif os.path.exists("best.pt"):
             model_path = "best.pt"
         else:
-            raise FileNotFoundError(f"Model file not found at '{model_path}' or 'best.pt'")
+            raise FileNotFoundError(f"Model file not found at '{model_path}'")
     
     # This code initializes the YOLO model from Ultralytics
     return YOLO(model_path)
@@ -22,15 +26,15 @@ def load_detector(model_path: str = "models/best.pt"):
 # =====================================================================
 # STEP 2: DETECT PERSONS IN FRAME
 # =====================================================================
-def detect_persons(model, frame, conf_thresh: float = 0.5):
+def detect_persons(model, frame, conf_thresh: float = 0.25):
     """
-    Runs YOLOv8 on the frame and filters strictly for class ID 0 ('person').
+    Runs YOLOv11 on the frame and filters strictly for class ID 0 ('person').
     Returns bounding boxes on CPU, or None if no persons are detected.
     """
     # This code selects CUDA GPU if available, otherwise falls back to CPU
     device = "cuda" if torch.cuda.is_available() else "cpu"
     
-    # This code runs inference on the frame using YOLOv8
+    # This code runs inference on the frame using YOLOv11
     results = model(frame, conf=conf_thresh, device=device, verbose=False)
     boxes = results[0].boxes
 

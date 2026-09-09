@@ -41,23 +41,23 @@ def draw_tracks(frame, tracked_persons, person_counter=None):
 # STEP 2: UNIFIED TRACKING PIPELINE CLASS
 # =====================================================================
 class TrackingPipeline:
-    """Combines YOLOv8 detector, ByteTrack tracker, and PersonCounter into a single pipeline."""
-    def __init__(self, model_path: str = "models/best.pt", line_position: float = 0.5):
-        # This code initializes YOLOv8 detector, ByteTrack tracker, PersonCounter, and FPS history buffer
-        self.model = load_detector(model_path)
-        self.tracker = init_tracker()
-        self.person_counter = PersonCounter(line_position=line_position)
-        self.frame_times = deque(maxlen=30)
+    """Combines YOLOv11 detector, ByteTrack tracker, and PersonCounter into a single pipeline."""
+    def __init__(self, model_path: str = "models/mot17_best.pt", line_position: float = 0.5):
+        # This code initializes YOLOv11 detector, ByteTrack tracker, PersonCounter, and FPS history buffer
+        self.model = load_detector(model_path)# initialize the model
+        self.tracker = init_tracker()# initialize the tracker
+        self.person_counter = PersonCounter(line_position=line_position)# initialize the counter
+        self.frame_times = deque(maxlen=30)# initialize the FPS history buffer
 
     def set_line_position(self, line_pos: float):
         # This code dynamically updates counting line position ratio
         self.person_counter.set_line_position(line_pos)
 
-    def process(self, frame, conf_thresh: float = 0.5):
+    def process(self, frame, conf_thresh: float = 0.45):
         """Processes a single video frame and returns the annotated frame and metrics."""
         start_time = time.time()
 
-        # Step 1: Detect persons using YOLOv8
+        # Step 1: Detect persons using YOLOv11
         boxes = detect_persons(self.model, frame, conf_thresh=conf_thresh)
 
         # Step 2: Track persons using ByteTrack

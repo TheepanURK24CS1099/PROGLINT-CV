@@ -102,6 +102,27 @@ def run_all_tests():
     print("TEST 7 (INSIDE enter and exit):", c7)
     assert c7['inside'] == 0 and c7['in'] == 1 and c7['out'] == 1, f"Failed TEST 7: {c7}"
 
+    # ----------------------------------------------------
+    # TEST 8: State Transition Double-Count Prevention
+    # ----------------------------------------------------
+    # Tests that continuous movement or lingering after line crossing does not trigger double counts
+    counter8 = PersonCounter(line_position=0.5)  # Line at Y=240
+    # Start ABOVE (y2 = 100)
+    counter8.update([{'track_id': 88, 'bbox': [100, 50, 150, 100]}], frame_shape)
+    # Move BELOW (y2 = 290) -> IN = 1
+    counter8.update([{'track_id': 88, 'bbox': [100, 240, 150, 290]}], frame_shape)
+    # Lingers BELOW for 50 frames (y2 = 300..350)
+    for y2 in range(300, 350):
+        counter8.update([{'track_id': 88, 'bbox': [100, y2 - 50, 150, y2]}], frame_shape)
+    c8_below = counter8.get_counts()
+    assert c8_below['in'] == 1 and c8_below['out'] == 0, f"Lingering triggered false double count: {c8_below}"
+    
+    # Move back ABOVE (y2 = 100) -> OUT = 1
+    counter8.update([{'track_id': 88, 'bbox': [100, 50, 150, 100]}], frame_shape)
+    c8_final = counter8.get_counts()
+    print("TEST 8 (State Transition Double-Count Prevention):", c8_final)
+    assert c8_final['in'] == 1 and c8_final['out'] == 1 and c8_final['inside'] == 0, f"Failed TEST 8: {c8_final}"
+
     print("\n[SUCCESS] ALL UNIT TESTS PASSED PERFECTLY!\n")
 
 

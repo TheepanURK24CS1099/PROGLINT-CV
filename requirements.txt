@@ -1,4 +1,4 @@
-# Core Dependencies for YOLOv8 Person Detection and ByteTrack Tracking
+# Core Dependencies for YOLOv11 Person Detection and ByteTrack Tracking
 ultralytics>=8.0.0
 opencv-python>=4.8.0
 streamlit>=1.30.0
